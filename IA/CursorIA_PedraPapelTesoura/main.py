@@ -1,5 +1,6 @@
 import sys
 import random
+import os
 
 import pygame
 
@@ -20,24 +21,31 @@ OPCOES = ["Pedra", "Papel", "Tesoura"]
 
 
 class Botao:
-    def __init__(self, rect, texto, cor_fundo, cor_hover, fonte):
+    def __init__(self, rect, texto, cor_fundo, cor_hover, fonte, imagem=None):
         self.rect = pygame.Rect(rect)
         self.texto = texto
         self.cor_fundo = cor_fundo
         self.cor_hover = cor_hover
         self.fonte = fonte
+        self.imagem = imagem
 
     def desenhar(self, superficie):
         mouse_pos = pygame.mouse.get_pos()
         esta_hover = self.rect.collidepoint(mouse_pos)
-        cor = self.cor_hover if esta_hover else self.cor_fundo
 
-        pygame.draw.rect(superficie, cor, self.rect, border_radius=10)
-        pygame.draw.rect(superficie, CINZA_ESCURO, self.rect, 2, border_radius=10)
-
-        texto_render = self.fonte.render(self.texto, True, PRETO)
-        texto_rect = texto_render.get_rect(center=self.rect.center)
-        superficie.blit(texto_render, texto_rect)
+        if self.imagem is not None:
+            imagem = self.imagem
+            if esta_hover:
+                largura = int(self.imagem.get_width() * 1.05)
+                altura = int(self.imagem.get_height() * 1.05)
+                imagem = pygame.transform.smoothscale(self.imagem, (largura, altura))
+            imagem_rect = imagem.get_rect(center=self.rect.center)
+            self.rect.size = imagem_rect.size
+            superficie.blit(imagem, imagem_rect)
+        elif self.texto:
+            texto_render = self.fonte.render(self.texto, True, PRETO)
+            texto_rect = texto_render.get_rect(center=self.rect.center)
+            superficie.blit(texto_render, texto_rect)
 
     def foi_clicado(self, evento):
         if evento.type == pygame.MOUSEBUTTONDOWN and evento.button == 1:
@@ -60,6 +68,29 @@ def determinar_resultado(jogador, computador):
     return "Computador venceu!"
 
 
+def carregar_e_recortar_imagens():
+    base_dir = os.path.dirname(__file__)
+    caminho_imagem = os.path.join(base_dir, "img", "pedra-papel-tesoura.jpg")
+
+    sprite = pygame.image.load(caminho_imagem).convert_alpha()
+    largura_total, altura = sprite.get_size()
+    largura_icone = largura_total // 3
+
+    pedra_surface = sprite.subsurface((0, 0, largura_icone, altura)).copy()
+    papel_surface = sprite.subsurface((largura_icone, 0, largura_icone, altura)).copy()
+    tesoura_surface = sprite.subsurface((2 * largura_icone, 0, largura_icone, altura)).copy()
+
+    saida_dir = os.path.join(base_dir, "img")
+    try:
+        pygame.image.save(pedra_surface, os.path.join(saida_dir, "pedra.png"))
+        pygame.image.save(papel_surface, os.path.join(saida_dir, "papel.png"))
+        pygame.image.save(tesoura_surface, os.path.join(saida_dir, "tesoura.png"))
+    except Exception:
+        pass
+
+    return pedra_surface, papel_surface, tesoura_surface
+
+
 def main():
     pygame.init()
     pygame.display.set_caption("Pedra, Papel e Tesoura")
@@ -69,6 +100,8 @@ def main():
     fonte_titulo = pygame.font.SysFont("arial", 48, bold=True)
     fonte_texto = pygame.font.SysFont("arial", 28)
     fonte_pequena = pygame.font.SysFont("arial", 22)
+
+    img_pedra, img_papel, img_tesoura = carregar_e_recortar_imagens()
 
     largura_botao = 180
     altura_botao = 70
@@ -80,17 +113,27 @@ def main():
 
     botoes = []
     cores = [AZUL, VERDE, VERMELHO]
+    imagens_botoes_originais = [img_pedra, img_papel, img_tesoura]
+
+    imagens_botoes = []
+    altura_imagem = altura_botao - 20
+    for img in imagens_botoes_originais:
+        fator = altura_imagem / img.get_height()
+        nova_largura = int(img.get_width() * fator)
+        img_escalada = pygame.transform.smoothscale(img, (nova_largura, altura_imagem))
+        imagens_botoes.append(img_escalada)
 
     for i, opcao in enumerate(OPCOES):
         x = inicio_x + i * (largura_botao + espacamento)
         botao = Botao(
             rect=(x, y_botoes, largura_botao, altura_botao),
-            texto=opcao,
+            texto="",
             cor_fundo=cores[i],
             cor_hover=(min(cores[i][0] + 30, 255),
                        min(cores[i][1] + 30, 255),
                        min(cores[i][2] + 30, 255)),
             fonte=fonte_texto,
+            imagem=imagens_botoes[i],
         )
         botoes.append(botao)
 
@@ -157,13 +200,27 @@ def main():
         else:
             texto_jogador = fonte_texto.render(f"Sua escolha: {escolha_jogador}", True, AZUL)
             texto_comp = fonte_texto.render(f"Computador: {escolha_computador}", True, VERMELHO)
-            texto_resultado = fonte_titulo.render(resultado, True, VERDE if resultado == "Você venceu!" else (VERMELHO if resultado == "Computador venceu!" else CINZA_ESCURO))
+            texto_resultado = fonte_titulo.render(
+                resultado,
+                True,
+                VERDE if resultado == "Você venceu!" else (
+                    VERMELHO if resultado == "Computador venceu!" else CINZA_ESCURO
+                ),
+            )
+            texto_placar_rodada = fonte_texto.render(
+                f"Placar - Você: {placar_jogador}  Computador: {placar_computador}  Empates: {empates}",
+                True,
+                CINZA_ESCURO,
+            )
 
             tela.blit(texto_jogador, (140, 240))
             tela.blit(texto_comp, (140, 290))
 
             resultado_rect = texto_resultado.get_rect(center=(LARGURA // 2, 360))
             tela.blit(texto_resultado, resultado_rect)
+
+            placar_rodada_rect = texto_placar_rodada.get_rect(center=(LARGURA // 2, 400))
+            tela.blit(texto_placar_rodada, placar_rodada_rect)
 
         dica = fonte_pequena.render("Pressione R para limpar o resultado • ESC para sair", True, CINZA_ESCURO)
         dica_rect = dica.get_rect(center=(LARGURA // 2, ALTURA - 40))
