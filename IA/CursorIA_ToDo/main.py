@@ -1,12 +1,19 @@
 import sqlite3
-import tkinter as tk
 from pathlib import Path
-from tkinter import messagebox
-from tkinter import ttk
+from typing import Any
+
+try:
+    import tkinter as tk
+    from tkinter import messagebox
+    from tkinter import ttk
+except ModuleNotFoundError:
+    tk = None
+    messagebox = None
+    ttk = None
 
 
 class TodoApp:
-    def __init__(self, root: tk.Tk) -> None:
+    def __init__(self, root: Any) -> None:
         self.root = root
         self.root.title("Lista de Tarefas")
         self.root.geometry("560x480")
@@ -314,9 +321,90 @@ class TodoApp:
 
 
 def main() -> None:
+    if tk is None:
+        print("Tkinter não está disponível neste ambiente.")
+        print("Iniciando em modo texto (CLI)...")
+        run_cli()
+        return
+
     root = tk.Tk()
-    app = TodoApp(root)
+    TodoApp(root)
     root.mainloop()
+
+
+def run_cli() -> None:
+    db_path = Path(__file__).with_name("tasks.db")
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tasks (
+            id   INTEGER PRIMARY KEY AUTOINCREMENT,
+            text TEXT NOT NULL,
+            done INTEGER NOT NULL DEFAULT 0
+        )
+        """
+    )
+    conn.commit()
+
+    print("\nComandos: list | add <texto> | done <id> | del <id> | exit")
+    while True:
+        raw = input("todo> ").strip()
+        if not raw:
+            continue
+
+        if raw == "exit":
+            break
+
+        if raw == "list":
+            rows = conn.execute(
+                "SELECT id, text, done FROM tasks ORDER BY id"
+            ).fetchall()
+            if not rows:
+                print("Sem tarefas.")
+                continue
+            for row in rows:
+                marker = "x" if row["done"] else " "
+                print(f"[{marker}] {row['id']}: {row['text']}")
+            continue
+
+        if raw.startswith("add "):
+            text = raw[4:].strip()
+            if not text:
+                print("Informe o texto da tarefa.")
+                continue
+            conn.execute("INSERT INTO tasks (text, done) VALUES (?, 0)", (text,))
+            conn.commit()
+            print("Tarefa adicionada.")
+            continue
+
+        if raw.startswith("done "):
+            task_id = raw[5:].strip()
+            if not task_id.isdigit():
+                print("Informe um id numérico.")
+                continue
+            conn.execute(
+                "UPDATE tasks SET done = CASE WHEN done = 1 THEN 0 ELSE 1 END WHERE id = ?",
+                (int(task_id),),
+            )
+            conn.commit()
+            print("Tarefa atualizada.")
+            continue
+
+        if raw.startswith("del "):
+            task_id = raw[4:].strip()
+            if not task_id.isdigit():
+                print("Informe um id numérico.")
+                continue
+            conn.execute("DELETE FROM tasks WHERE id = ?", (int(task_id),))
+            conn.commit()
+            print("Tarefa removida.")
+            continue
+
+        print("Comando inválido.")
+
+    conn.close()
 
 
 if __name__ == "__main__":
