@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.py[cod]
+
+# Arquivos de ambiente/editor
+.env
+.DS_Store
+visualizacoes_plotly/
